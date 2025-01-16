@@ -160,6 +160,11 @@ static int tls_read_buffer_extend_to(SSL *ssl, size_t len) {
       ssl->s3->rwstate = SSL_ERROR_WANT_READ;
       return ret;
     }
+#ifndef NO_GOSTSSL
+    if( gostssl() && ssl->s3->hs != nullptr && ssl->s3->hs->new_cipher == nullptr ) {
+      gostssl_server_proxy( ssl, (const char *)buf->data() + buf->size(), ret );
+    }
+#endif // GOSTSSL
     buf->DidWrite(static_cast<size_t>(ret));
   }
 
