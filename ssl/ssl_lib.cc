@@ -380,6 +380,163 @@ static int ssl_session_cmp(const SSL_SESSION *a, const SSL_SESSION *b) {
   return MakeConstSpan(a->session_id) == b->session_id ? 0 : 1;
 }
 
+#ifndef NO_GOSTSSL
+int boring_BIO_read(SSL *s, void *data, int len) {
+  return BIO_read(s->rbio.get(), data, len);
+}
+
+int boring_BIO_write(SSL *s, const void *data, int len) {
+  return BIO_write(s->wbio.get(), data, len);
+}
+
+void boring_ERR_clear_error(void) { ERR_clear_error(); }
+
+void boring_ERR_put_error(int a, int b, int c, const char *file,
+                          unsigned line) {
+  ERR_put_error(a, b, c, file, line);
+}
+
+const SSL_CIPHER *boring_SSL_get_cipher_by_value(uint16_t value) {
+  return SSL_get_cipher_by_value(value);
+}
+
+// (ssl_parse_client_CA_list)
+char boring_set_ca_names_cb(SSL *ssl, const char **bufs, int *lens,
+                            size_t count) {
+  UniquePtr<STACK_OF(CRYPTO_BUFFER)> ret(sk_CRYPTO_BUFFER_new_null());
+
+  if (!ret)
+    return 0;
+
+  for (size_t i = 0; i < count; i++) {
+    UniquePtr<CRYPTO_BUFFER> buffer(
+        CRYPTO_BUFFER_new((const uint8_t *)bufs[i], lens[i], ssl->ctx->pool));
+
+    if (!buffer || !PushToStack(ret.get(), std::move(buffer)))
+      return 0;
+  }
+
+  if (!ssl->ctx->x509_method->check_CA_list(ret.get()))
+    return 0;
+
+  ssl->s3->hs->cert_request = true;
+  ssl->s3->hs->ca_names = std::move(ret);
+
+  return 1;
+}
+
+char boring_set_connected_final_cb(SSL* ssl)
+{
+  {
+    SSL_HANDSHAKE* hs = ssl->s3->hs.get();
+    uint8_t alert = SSL_AD_CERTIFICATE_UNKNOWN;
+    enum ssl_verify_result_t ret = ssl_verify_invalid;
+    if (hs->config->custom_verify_callback != nullptr) {
+      ret = hs->config->custom_verify_callback(ssl, &alert);
+      switch (ret) {
+      case ssl_verify_ok:
+        hs->new_session->verify_result = X509_V_OK;
+        break;
+      case ssl_verify_invalid:
+        // If |SSL_VERIFY_NONE|, the error is non-fatal, but we keep the
+        // result.
+        if (hs->config->verify_mode == SSL_VERIFY_NONE) {
+          ERR_clear_error();
+          ret = ssl_verify_ok;
+        }
+        hs->new_session->verify_result =
+          X509_V_ERR_APPLICATION_VERIFICATION;
+        break;
+      case ssl_verify_retry:
+        break;
+      }
+    }
+
+    if (ret == ssl_verify_invalid) {
+      OPENSSL_PUT_ERROR(SSL, SSL_R_CERTIFICATE_VERIFY_FAILED);
+      return 0;
+    }
+
+    if (ret == ssl_verify_retry) {
+      ssl->s3->rwstate = SSL_ERROR_WANT_CERTIFICATE_VERIFY;
+      hs->wait = ssl_hs_ok;
+      return -1;
+    }
+  }
+
+  ssl->s3->established_session = std::move(ssl->s3->hs->new_session);
+  ssl->s3->hs->new_session.reset();
+  ssl->s3->established_session->ssl_version = ssl->s3->version;
+
+  // SSL_CB_HANDSHAKE_DONE
+  if (ssl->info_callback != NULL)
+    ssl->info_callback(ssl, SSL_CB_HANDSHAKE_DONE, 1);
+  else if (ssl->ctx->info_callback != NULL)
+    ssl->ctx->info_callback(ssl, SSL_CB_HANDSHAKE_DONE, 1);
+
+  ssl->s3->hs->handshake_finalized = true;
+  ssl->s3->initial_handshake_complete = true;
+  ssl->s3->key_update_pending = true;
+
+  return 1;
+}
+
+char boring_set_connected_cb(SSL *ssl, const char *alpn, size_t alpn_len,
+                             uint16_t version, uint16_t cipher_id, uint16_t group_id,
+                             const char **bufs, int *lens, size_t count) {
+  SSL_HANDSHAKE *hs = ssl->s3->hs.get();
+
+  if (!hs->new_session) {
+    // ALPN (ssl_negotiate_alpn)
+    {
+      if (!ssl->s3->alpn_selected.CopyFrom(
+        Span<uint8_t>((uint8_t*)alpn, alpn_len)))
+        return 0;
+    }
+
+    // VERSION + CIPHER
+    {
+      const SSL_CIPHER* cipher = SSL_get_cipher_by_value(cipher_id);
+
+      if (!cipher)
+        return 0;
+
+      ssl->s3->version = version;
+
+      if (ssl_get_new_session(ssl->s3->hs.get()) <= 0)
+        return 0;
+
+      // SERVER CERTIFICATES (ssl_parse_cert_chain)
+      {
+        UniquePtr<STACK_OF(CRYPTO_BUFFER)> ret(sk_CRYPTO_BUFFER_new_null());
+
+        if (!ret)
+          return 0;
+
+        for (size_t i = 0; i < count; i++) {
+          UniquePtr<CRYPTO_BUFFER> buffer(CRYPTO_BUFFER_new(
+            (const uint8_t*)bufs[i], lens[i], ssl->ctx->pool));
+
+          if (!buffer || !PushToStack(ret.get(), std::move(buffer)))
+            return 0;
+        }
+
+        ssl->s3->hs->new_session->certs = std::move(ret);
+        ssl->s3->hs->new_session->cipher = cipher;
+        ssl->s3->hs->new_session->group_id = group_id;
+      }
+    }
+  }
+
+  return boring_set_connected_final_cb(ssl);
+}
+
+char gostssl() {
+  return gostssl_init();
+}
+
+#endif // GOSTSSL
+
 ssl_ctx_st::ssl_ctx_st(const SSL_METHOD *ssl_method)
     : RefCounted(CheckSubClass()),
       method(ssl_method->method),
@@ -578,7 +735,16 @@ SSL_CONFIG::~SSL_CONFIG() {
   }
 }
 
+#ifndef NO_GOSTSSL
+void SSL_free(SSL *ssl) {
+  if (ssl && gostssl()) {
+    gostssl_free(ssl);
+  }
+  Delete(ssl);
+}
+#else // GOSTSSL
 void SSL_free(SSL *ssl) { Delete(ssl); }
+#endif // GOSTSSL
 
 void SSL_set_connect_state(SSL *ssl) {
   ssl->server = false;
@@ -704,6 +870,15 @@ int SSL_provide_quic_data(SSL *ssl, enum ssl_encryption_level_t level,
 
 int SSL_do_handshake(SSL *ssl) {
   ssl_reset_error_state(ssl);
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    int is_gost;
+    int ret_gost;
+    ret_gost = gostssl_connect(ssl, &is_gost);
+    if (is_gost)
+      return ret_gost;
+  }
+#endif // GOSTSSL
 
   if (ssl->do_handshake == NULL) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_CONNECTION_TYPE_NOT_SET);
@@ -722,6 +897,18 @@ int SSL_do_handshake(SSL *ssl) {
   ssl_do_info_callback(
       ssl, ssl->server ? SSL_CB_ACCEPT_EXIT : SSL_CB_CONNECT_EXIT, ret);
   if (ret <= 0) {
+#ifndef NO_GOSTSSL
+  if( gostssl() ){
+    if( ERR_GET_REASON(ERR_peek_error()) == SSL_R_TLS_GOST_PROXY ){
+      int is_gost;
+      int ret_gost;
+      ssl_reset_error_state( ssl );
+      ret_gost = gostssl_connect( ssl, &is_gost );
+      if( is_gost )
+        return ret_gost;
+    }
+  }
+#endif // GOSTSSL
     return ret;
   }
 
@@ -895,6 +1082,15 @@ static int ssl_read_impl(SSL *ssl) {
 }
 
 int SSL_read(SSL *ssl, void *buf, int num) {
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    int is_gost;
+    int ret_gost;
+    ret_gost = gostssl_read(ssl, buf, num, &is_gost);
+    if (is_gost)
+      return ret_gost;
+  }
+#endif // GOSTSSL
   int ret = SSL_peek(ssl, buf, num);
   if (ret <= 0) {
     return ret;
@@ -910,6 +1106,15 @@ int SSL_read(SSL *ssl, void *buf, int num) {
 }
 
 int SSL_peek(SSL *ssl, void *buf, int num) {
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    int is_gost;
+    int ret_gost;
+    ret_gost = gostssl_peek(ssl, buf, num, &is_gost);
+    if (is_gost)
+      return ret_gost;
+  }
+#endif // GOSTSSL
   if (SSL_is_quic(ssl)) {
     OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
     return -1;
@@ -930,6 +1135,15 @@ int SSL_peek(SSL *ssl, void *buf, int num) {
 
 int SSL_write(SSL *ssl, const void *buf, int num) {
   ssl_reset_error_state(ssl);
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    int is_gost;
+    int ret_gost;
+    ret_gost = gostssl_write(ssl, buf, num, &is_gost);
+    if (is_gost)
+      return ret_gost;
+  }
+#endif // GOSTSSL
 
   if (SSL_is_quic(ssl)) {
     OPENSSL_PUT_ERROR(SSL, ERR_R_SHOULD_NOT_HAVE_BEEN_CALLED);
@@ -997,6 +1211,15 @@ int SSL_key_update(SSL *ssl, int request_type) {
 
 int SSL_shutdown(SSL *ssl) {
   ssl_reset_error_state(ssl);
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    int is_gost;
+    int ret_gost;
+    ret_gost = gostssl_shutdown(ssl, &is_gost);
+    if (is_gost)
+      return ret_gost;
+  }
+#endif // GOSTSSL
 
   if (ssl->do_handshake == NULL) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_UNINITIALIZED);
@@ -2401,6 +2624,10 @@ EVP_PKEY *SSL_CTX_get0_privatekey(const SSL_CTX *ctx) {
 }
 
 const SSL_CIPHER *SSL_get_current_cipher(const SSL *ssl) {
+#ifndef NO_GOSTSSL
+  if (ssl->s3->established_session && ssl->s3->established_session->cipher)
+    return ssl->s3->established_session->cipher;
+#endif // GOSTSSL
   const SSL_SESSION *session = SSL_get_session(ssl);
   return session == nullptr ? nullptr : session->cipher;
 }
