@@ -702,6 +702,13 @@ BSSL_NAMESPACE_BEGIN
 #define SSL_kPSK 0x00000004u
 #define SSL_kGENERIC 0x00000008u
 
+#ifndef NO_GOSTSSL
+#define SSL_kGOST 0x00010000L
+#define SSL_aGOST 0x00010000L
+#define SSL_eGOST 0x00010000L
+#define SSL_iGOST 0x00010000L
+#endif // GOSTSSL
+
 // Bits for |algorithm_auth| (server authentication).
 #define SSL_aRSA_SIGN 0x00000001u
 #define SSL_aRSA_DECRYPT 0x00000002u
@@ -4025,6 +4032,36 @@ void ssl_set_read_error(SSL *ssl);
 
 BSSL_NAMESPACE_END
 
+#ifndef NO_GOSTSSL
+extern "C" {
+//
+int boring_BIO_read(SSL *s, void *data, int len);
+int boring_BIO_write(SSL *s, const void *data, int len);
+void boring_ERR_clear_error(void);
+void boring_ERR_put_error(int, int, int, const char *file, unsigned line);
+const SSL_CIPHER *boring_SSL_get_cipher_by_value(uint16_t value);
+char boring_set_ca_names_cb(SSL *s, const char **bufs, int *lens, size_t count);
+char boring_set_connected_cb(SSL *s, const char *alpn, size_t alpn_len,
+                             uint16_t version, uint16_t cipher_id, uint16_t group_id,
+                             const char **cert_bufs, int *cert_lens,
+                             size_t cert_count);
+char boring_set_connected_final_cb(SSL *s);
+//
+char gostssl();
+//
+int gostssl_init();
+int gostssl_connect( SSL * s, int * is_gost );
+int gostssl_read( SSL * s, void * buf, int len, int * is_gost );
+int gostssl_peek( SSL * s, void * buf, int len, int * is_gost );
+int gostssl_write( SSL * s, const void * buf, int len, int * is_gost );
+int gostssl_shutdown( SSL * s, int * is_gost );
+void gostssl_free( SSL * s );
+int gostssl_tls_gost_required( SSL * s, const SSL_CIPHER * cipher );
+void gostssl_boring_hello( SSL * s, const char * data, size_t len );
+void gostssl_server_proxy( SSL * s, const char * data, size_t len );
+//
+}
+#endif // GOSTSSL
 
 // Opaque C types.
 //
