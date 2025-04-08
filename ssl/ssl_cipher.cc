@@ -73,6 +73,20 @@ static constexpr SSL_CIPHER kCiphers[] = {
         SSL_HANDSHAKE_MAC_DEFAULT,
     },
 
+#ifndef NO_GOSTSSL
+    /* Cipher 81 (GOSTSSL) */
+    {
+        "GOST2001-GOST89-GOST89",
+        "TLS_GOSTR341001_WITH_28147_CNT_IMIT",
+        0x03000081,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+#endif // GOSTSSL
+
     // PSK cipher suites.
 
     // Cipher 8C
@@ -301,6 +315,94 @@ static constexpr SSL_CIPHER kCiphers[] = {
 
     // ChaCha20-Poly1305 cipher suites.
 
+#ifndef NO_GOSTSSL
+
+    /* Cipher C100 (GOSTSSL) */
+    {
+        "GOST2012-GOST15K-GOST15K",
+        "TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC",
+        0x0300C100,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C101 (GOSTSSL) */
+    {
+        "GOST2012-GOST15M-GOST15M",
+        "TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC",
+        0x0300C101,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C102 (GOSTSSL) */
+    {
+        "IANA-GOST2012-GOST8912-GOST8912",
+        "TLS_GOSTR341112_256_WITH_28147_CNT_IMIT",
+        0x0300C102,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C103 (GOSTSSL) */
+    {
+        "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L",
+        "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L",
+        0x0300C103,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C104 (GOSTSSL) */
+    {
+        "TLS_GOSTR341112_256_WITH_MAGMA_MGM_L",
+        "TLS_GOSTR341112_256_WITH_MAGMA_MGM_L",
+        0x0300C104,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C105 (GOSTSSL) */
+    {
+        "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S",
+        "TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S",
+        0x0300C105,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+    /* Cipher C106 (GOSTSSL) */
+    {
+        "TLS_GOSTR341112_256_WITH_MAGMA_MGM_S",
+        "TLS_GOSTR341112_256_WITH_MAGMA_MGM_S",
+        0x0300C106,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+#endif // GOSTSSL
+
     // Cipher CCA8
     {
         TLS1_TXT_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256,
@@ -336,6 +438,22 @@ static constexpr SSL_CIPHER kCiphers[] = {
         SSL_AEAD,
         SSL_HANDSHAKE_MAC_SHA256,
     },
+
+#ifndef NO_GOSTSSL
+
+    /* Cipher FF85 (GOSTSSL) */
+    {
+        "GOST2012-GOST8912-GOST8912",
+        "TLS_GOSTR341112_256_WITH_28147_CNT_IMIT",
+        0x0300FF85,
+        SSL_kGOST,
+        SSL_aGOST,
+        SSL_eGOST,
+        SSL_iGOST,
+        SSL_HANDSHAKE_MAC_SHA256,
+    },
+
+#endif // GOSTSSL
 
 };
 
@@ -1014,6 +1132,21 @@ bool ssl_create_cipher_list(UniquePtr<SSLCipherPreferenceList> *out_cipher_list,
       TLS1_CK_ECDHE_ECDSA_WITH_AES_256_GCM_SHA384 & 0xffff,
       TLS1_CK_ECDHE_RSA_WITH_AES_256_GCM_SHA384 & 0xffff,
   };
+#ifndef NO_GOSTSSL
+  static const uint16_t kGOSTCiphers[] = {
+      0xC100, // TLS_GOSTR341112_256_WITH_KUZNYECHIK_CTR_OMAC
+      0xC101, // TLS_GOSTR341112_256_WITH_MAGMA_CTR_OMAC
+      0xC102, // TLS_GOSTR341112_256_WITH_28147_CNT_IMIT_IANA
+      0xFF85, // TLS_GOSTR341112_256_WITH_28147_CNT_IMIT
+      0x0081, // TLS_GOSTR341001_WITH_28147_CNT_IMIT
+  };
+  static const uint16_t kGOST13Ciphers[] = {
+      0xC103, // TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_L
+      0xC105, // TLS_GOSTR341112_256_WITH_KUZNYECHIK_MGM_S
+      0xC104, // TLS_GOSTR341112_256_WITH_MAGMA_MGM_L
+      0xC106, // TLS_GOSTR341112_256_WITH_MAGMA_MGM_S
+  };
+#endif // GOSTSSL
   static const uint16_t kChaChaCiphers[] = {
       TLS1_CK_ECDHE_ECDSA_WITH_CHACHA20_POLY1305_SHA256 & 0xffff,
       TLS1_CK_ECDHE_RSA_WITH_CHACHA20_POLY1305_SHA256 & 0xffff,
@@ -1038,6 +1171,10 @@ bool ssl_create_cipher_list(UniquePtr<SSLCipherPreferenceList> *out_cipher_list,
 
   // Set up a linked list of ciphers.
   CIPHER_ORDER co_list[OPENSSL_ARRAY_SIZE(kAESCiphers) +
+#ifndef NO_GOSTSSL
+                       OPENSSL_ARRAY_SIZE(kGOSTCiphers) +
+                       OPENSSL_ARRAY_SIZE(kGOST13Ciphers) +
+#endif // GOSTSSL
                        OPENSSL_ARRAY_SIZE(kChaChaCiphers) +
                        OPENSSL_ARRAY_SIZE(kLegacyCiphers)];
   for (size_t i = 0; i < OPENSSL_ARRAY_SIZE(co_list); i++) {
@@ -1055,6 +1192,16 @@ bool ssl_create_cipher_list(UniquePtr<SSLCipherPreferenceList> *out_cipher_list,
   // TODO(crbug.com/boringssl/29): We should also set up equipreference groups
   // as a server.
   size_t num = 0;
+#ifndef NO_GOSTSSL
+  for (uint16_t id : kGOST13Ciphers) {
+    co_list[num++].cipher = SSL_get_cipher_by_value(id);
+    assert(co_list[num - 1].cipher != nullptr);
+  }
+  for (uint16_t id : kGOSTCiphers) {
+    co_list[num++].cipher = SSL_get_cipher_by_value(id);
+    assert(co_list[num - 1].cipher != nullptr);
+  }
+#endif // GOSTSSL
   if (has_aes_hw) {
     for (uint16_t id : kAESCiphers) {
       co_list[num++].cipher = SSL_get_cipher_by_value(id);
@@ -1079,6 +1226,32 @@ bool ssl_create_cipher_list(UniquePtr<SSLCipherPreferenceList> *out_cipher_list,
   static_assert(OPENSSL_ARRAY_SIZE(co_list) + NumTLS13Ciphers() ==
                     OPENSSL_ARRAY_SIZE(kCiphers),
                 "Not all ciphers are included in the cipher order");
+
+#ifndef NO_GOSTSSL
+  if( gostssl() )
+  {
+    if( ( gostssl() & ( 1 << 3 ) ) == 0 )
+    {
+      ssl_cipher_apply_rule( 0x0300C103, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+      ssl_cipher_apply_rule( 0x0300C104, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+      ssl_cipher_apply_rule( 0x0300C105, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+      ssl_cipher_apply_rule( 0x0300C106, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    }
+  }
+  else
+  {
+    ssl_cipher_apply_rule( 0x0300C100, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300C101, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300C102, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300FF85, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x03000081, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+
+    ssl_cipher_apply_rule( 0x0300C103, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300C104, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300C105, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+    ssl_cipher_apply_rule( 0x0300C106, nullptr, CIPHER_KILL, -1, 0, &head, &tail );
+  }
+#endif // GOSTSSL
 
   // If the rule_string begins with DEFAULT, apply the default rule before
   // using the (possibly available) additional rules.
@@ -1275,6 +1448,9 @@ int SSL_CIPHER_get_kx_nid(const SSL_CIPHER *cipher) {
     case SSL_kRSA:
       return NID_kx_rsa;
     case SSL_kECDHE:
+#ifndef NO_GOSTSSL
+    case SSL_kGOST:
+#endif // GOSTSSL
       return NID_kx_ecdhe;
     case SSL_kPSK:
       return NID_kx_psk;
@@ -1291,6 +1467,9 @@ int SSL_CIPHER_get_auth_nid(const SSL_CIPHER *cipher) {
     case SSL_aRSA_SIGN:
       return NID_auth_rsa;
     case SSL_aECDSA:
+#ifndef NO_GOSTSSL
+    case SSL_aGOST:
+#endif // GOSTSSL
       return NID_auth_ecdsa;
     case SSL_aPSK:
       return NID_auth_psk;
@@ -1414,6 +1593,9 @@ int SSL_CIPHER_get_bits(const SSL_CIPHER *cipher, int *out_alg_bits) {
 
     case SSL_AES256:
     case SSL_AES256GCM:
+#ifndef NO_GOSTSSL
+    case SSL_eGOST:
+#endif // GOSTSSL
     case SSL_CHACHA20POLY1305:
       alg_bits = 256;
       strength_bits = 256;

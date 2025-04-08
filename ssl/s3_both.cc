@@ -239,6 +239,14 @@ int tls_flush(SSL *ssl) {
       return ret;
     }
 
+#ifndef NO_GOSTSSL
+  if( gostssl() ){
+    if( ssl->s3->hs != nullptr && ssl->s3->hs->new_cipher == nullptr ){
+      gostssl_boring_hello( ssl, ssl->s3->pending_flight->data + ssl->s3->pending_flight_offset, ret );
+    }
+  }
+#endif // GOSTSSL
+
     ssl->s3->pending_flight_offset += ret;
   }
 
