@@ -343,6 +343,34 @@ bool tls12_add_verify_sigalgs(const SSL_HANDSHAKE *hs, CBB *out) {
       return false;
     }
   }
+#ifndef NO_GOSTSSL
+  if( gostssl() & ( 1 << 3 ) )
+  {
+    if(
+      !CBB_add_u16(out, 0x0709) || // gostr34102012_256a
+      !CBB_add_u16(out, 0x070A) || // gostr34102012_256b
+      !CBB_add_u16(out, 0x070B) || // gostr34102012_256c
+      !CBB_add_u16(out, 0x070C) || // gostr34102012_256d
+      !CBB_add_u16(out, 0x070D) || // gostr34102012_512a
+      !CBB_add_u16(out, 0x070E) || // gostr34102012_512b
+      !CBB_add_u16(out, 0x070F)    // gostr34102012_512c
+      ) {
+      return false;
+    }
+  }
+  if( gostssl() & ( 1 << 3 ) )
+  {
+    if(
+      !CBB_add_u16(out, 0x0840) || // TLS_INTRINSIC_HASH GOST_R_3410_12_256_IANA_DESC_BYTE
+      !CBB_add_u16(out, 0x0841) || // TLS_INTRINSIC_HASH GOST_R_3410_12_512_IANA_DESC_BYTE
+      !CBB_add_u16(out, 0xEEEE) || // GOST_R_3411_12_256_DESC_BYTE GOST_R_3410_12_256_DESC_BYTE
+      !CBB_add_u16(out, 0xEFEF) || // GOST_R_3411_12_512_DESC_BYTE GOST_R_3410_12_512_DESC_BYTE
+      !CBB_add_u16(out, 0xEDED)    // GOST_R_3411_DESC_BYTE GOST_R_3410_DESC_BYTE
+      ) {
+      return false;
+    }
+  }
+#endif // GOSTSSL
   return true;
 }
 
@@ -2449,6 +2477,23 @@ static bool ext_supported_groups_add_clienthello(const SSL_HANDSHAKE *hs,
       return false;
     }
   }
+
+#ifndef NO_GOSTSSL
+  if( gostssl() & ( 1 << 3 ) )
+  {
+    if(
+      !CBB_add_u16(&groups_bytes, 0x22) || // TLSEXT_elliptic_curve_gostr34102012_256a
+      !CBB_add_u16(&groups_bytes, 0x23) || // TLSEXT_elliptic_curve_gostr34102012_256b
+      !CBB_add_u16(&groups_bytes, 0x24) || // TLSEXT_elliptic_curve_gostr34102012_256c
+      !CBB_add_u16(&groups_bytes, 0x25) || // TLSEXT_elliptic_curve_gostr34102012_256d
+      !CBB_add_u16(&groups_bytes, 0x26) || // TLSEXT_elliptic_curve_gostr34102012_512a
+      !CBB_add_u16(&groups_bytes, 0x27) || // TLSEXT_elliptic_curve_gostr34102012_512b
+      !CBB_add_u16(&groups_bytes, 0x28)    // TLSEXT_elliptic_curve_gostr34102012_512c
+      ) {
+      return false;
+    }
+  }
+#endif // GOSTSSL
 
   return CBB_flush(out_compressible);
 }

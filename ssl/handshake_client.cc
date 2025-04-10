@@ -593,6 +593,14 @@ static enum ssl_hs_wait_t do_read_server_hello(SSL_HANDSHAKE *hs) {
     return ssl_hs_error;
   }
 
+#ifndef NO_GOSTSSL
+  if (gostssl()) {
+    if (gostssl_tls_gost_required(ssl, SSL_get_cipher_by_value(server_hello.cipher_suite))) {
+      return ssl_hs_error;
+    }
+  }
+#endif // GOSTSSL
+
   if (!ssl_supports_version(hs, server_version)) {
     OPENSSL_PUT_ERROR(SSL, SSL_R_UNSUPPORTED_PROTOCOL);
     ssl_send_alert(ssl, SSL3_AL_FATAL, SSL_AD_PROTOCOL_VERSION);
